@@ -13,7 +13,8 @@ function buildUserDataScript(githubRegistrationToken, label, config) {
       'source pre-runner-script.sh',
       'export RUNNER_ALLOW_RUNASROOT=1',
       `./config.sh --url https://github.com/${config.githubContext.owner}/${config.githubContext.repo} --token ${githubRegistrationToken} --labels ${label}`,
-      './run.sh',
+      './svc.sh install root',
+      './svc.sh start',
     ];
   } else {
     return [
@@ -29,7 +30,12 @@ function buildUserDataScript(githubRegistrationToken, label, config) {
       'export RUNNER_ALLOW_RUNASROOT=1',
       'export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1',
       `./config.sh --url https://github.com/${config.githubContext.owner}/${config.githubContext.repo} --token ${githubRegistrationToken} --labels ${label}`,
-      './run.sh',
+      './svc.sh install root',
+      'SVC_NAME=$(cat .service)',
+      'mkdir -p "/etc/systemd/system/${SVC_NAME}.d"',
+      'printf "[Service]\\nEnvironment=DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1\\n" > "/etc/systemd/system/${SVC_NAME}.d/env.conf"',
+      'systemctl daemon-reload',
+      './svc.sh start',
     ];
   }
 }
@@ -130,6 +136,8 @@ async function waitForInstanceRunning(ec2InstanceId) {
   try {
     await ec2.waitFor('instanceRunning', params).promise();
     core.info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
+    await ec2.waitFor('instanceStatusOk', params).promise();
+    core.info(`AWS EC2 instance ${ec2InstanceId} passed status checks`);
     return;
   } catch (error) {
     core.error(`AWS EC2 instance ${ec2InstanceId} initialization error`);
